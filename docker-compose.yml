@@ -1,0 +1,127 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15.3-alpine3.18
+    container_name: db
+    environment:
+      POSTGRES_DB: dbname
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpassword
+    volumes:
+      - db_data:/var/lib/postgresql/data:rw
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    container_name: web
+    depends_on:
+      - db
+      - redis
+      - minio
+      - celery_worker
+    environment:
+      ASYNC_DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@db/dbname
+      SYNC_DATABASE_URL: postgresql://dbuser:dbpassword@db/dbname
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_URL: minio:9000
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DOWNLOAD_URL: http://minio:9000
+      SECRET_KEY: secret_key
+      BUCKET_NAME: images
+    command: >
+      sh -c "poetry run alembic upgrade head && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - .:/app
+
+  celery_worker:
+    build: .
+    depends_on:
+      - redis
+      - db
+    container_name: celery_worker
+    environment:
+      ASYNC_DATABASE_URL: postgresql+asyncpg://dbuser:dbpassword@db/dbname
+      SYNC_DATABASE_URL: postgresql://dbuser:dbpassword@db/dbname
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_URL: minio:9000
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DOWNLOAD_URL: http://minio:9000
+      SECRET_KEY: secret_key
+      BUCKET_NAME: images
+    command: >
+      poetry run celery -A app.config.celery_settings.celery_app worker --loglevel=info --pool=prefork --concurrency=4
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ~/minio/data:/data
+
+  minio-client:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      if mc ls myminio/images; then
+        echo 'Bucket already exists';
+      else
+        mc mb myminio/images;
+      fi
+      "
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: db
+      GF_DATABASE_NAME: dbname
+      GF_DATABASE_USER: dbuser
+      GF_DATABASE_PASSWORD: dbpassword
+
+  dashboard:
+    build: .
+    command: celery --broker=redis://redis:6379/0 flower --port=5555
+    ports:
+      - "5556:5555"
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      - web
+      - redis
+      - celery_worker
+
+volumes:
+  db_data: { }
+  minio_storage: { }
+  grafana_data:
+    driver: local
