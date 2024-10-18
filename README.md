@@ -14,13 +14,16 @@
 
 ### Стек технологий
 
-- FastAPI
-- PostgreSQL
-- Celery
-- Asyncio
-- SQLAlchemy
-- Docker/Docker Compose
-- Pytest
+- FastAPI — фреймворк для создания API.
+- PostgreSQL — база данных для хранения информации о пользователях и задачах.
+- Alembic — миграции базы данных.
+- SQLAlchemy — ORM для работы с базой данных.
+- Celery — обработка фоновых задач (например, преобразование изображений).
+- Redis — брокер сообщений для Celery.
+- Minio — S3-совместимое хранилище для хранения изображений.
+- Pytest — тестирование.
+- Grafana — мониторинг и визуализация данных.
+- Poetry — инструмент для управления зависимостями и пакетами.
 
 ## API Методы
 
@@ -35,10 +38,6 @@
 
 ## Инструкция по установке и запуску
 
-### Предварительные требования
-
-1. Убедитесь, что у вас установлен Docker и Docker Compose.
-
 ### Шаги для запуска приложения
 
 1. Склонируйте репозиторий:
@@ -49,14 +48,34 @@
 
 2. Создайте файл .env на основе .env.example и заполните его необходимыми значениями.
 
-3. Запустите приложение с помощью Docker Compose:
+3. Установите Poetry, если он не установлен:
+   ```bash
+   curl -sSL https://install.python-poetry.org | python3 -
+   ```
+
+4. Установите зависимости проекта с помощью Poetry:
+   ```bash
+   poetry install
+   ```
+
+5. Запустите приложение с помощью Docker Compose:
    ```bash
    docker-compose up --build
    ```
 
-4. После успешного запуска, API будет доступен по адресу http://localhost:8000.
+6. Примените миграции для базы данных:
+   ```bash
+   poetry run alembic upgrade head
+   ```
 
-5. Для доступа к Grafana, перейдите по адресу http://localhost:3000 и используйте логин admin и пароль admin.
+7. После успешного запуска, API будет доступен по адресу http://localhost:8000.
+
+8. Для доступа к Grafana, перейдите по адресу http://localhost:3000 и используйте логин admin и пароль admin.
+
+### Запуск тестов:
+   ```bash
+   poetry run pytest
+   ```
 
 ### Установка pre-commit
 
@@ -65,9 +84,9 @@
 
 ### Установка
 
-1. Установите pre-commit с помощью pip:
+1. Установите pre-commit с помощью poetry:
    ```bash
-   pip install pre-commit
+   poetry run pre-commit install
    ```
 
 2. Установите pre-commit hooks:
@@ -86,7 +105,7 @@
 
 Вы можете также запустить pre-commit вручную на всех файлах в проекте:
 ```bash
-pre-commit run --all-files
+poetry run pre-commit run --all-files
 ```
 
 ### Запуск тестов
